@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="pl">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Opłaty miesięczne</title>
+
+    <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="style.css" />
+
+    <style>
+        /* ── Bilance-specific ────────────────────────────────────── */
+        /* Month nav */
+        .month-nav {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .month-nav input[type="month"] {
+            flex: 1;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--text);
+            font-size: 1rem;
+            font-family: inherit;
+            font-weight: 500;
+            padding: 12px 16px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        .month-nav input[type="month"]:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+
+        .month-nav input[type="month"]::-webkit-calendar-picker-indicator {
+            filter: invert(0.5) sepia(1) hue-rotate(200deg);
+            cursor: pointer;
+        }
+
+        .nav-arrow {
+            flex-shrink: 0;
+            width: 36px;
+            height: 36px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            background: var(--surface2);
+            color: var(--text);
+            font-size: 1rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: border-color 0.2s, background 0.2s;
+        }
+
+        .nav-arrow:hover {
+            border-color: var(--accent);
+            background: rgba(108, 99, 255, 0.1);
+        }
+
+        /* Copy button */
+        .btn-copy {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            margin-top: 12px;
+            padding: 10px 16px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--muted);
+            font-family: inherit;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: border-color 0.2s, color 0.2s, background 0.2s;
+        }
+
+        .btn-copy:hover {
+            border-color: var(--accent);
+            color: var(--text);
+            background: rgba(108, 99, 255, 0.08);
+        }
+
+        .btn-copy.copied {
+            border-color: var(--success);
+            color: #86efac;
+        }
+
+        /* Toggle */
+        .view-toggle {
+            display: flex;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 4px;
+            gap: 4px;
+            margin-bottom: 20px;
+        }
+
+        .toggle-btn {
+            flex: 1;
+            padding: 8px 12px;
+            border: none;
+            border-radius: 6px;
+            background: transparent;
+            color: var(--muted);
+            font-family: inherit;
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.18s, color 0.18s;
+        }
+
+        .toggle-btn.active {
+            background: var(--accent);
+            color: #fff;
+            box-shadow: 0 2px 10px var(--accent-glow);
+        }
+
+        /* Summary charge cards */
+        .charge-cards {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .charge-card {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 14px 16px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .charge-icon {
+            font-size: 1.4rem;
+            flex-shrink: 0;
+            width: 36px;
+            text-align: center;
+        }
+
+        .charge-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .charge-name {
+            font-size: 0.78rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 2px;
+        }
+
+        .charge-meta {
+            font-size: 0.72rem;
+            color: var(--muted);
+        }
+
+        .charge-amount {
+            font-size: 1.1rem;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            text-align: right;
+            flex-shrink: 0;
+        }
+
+        /* No-data card */
+        .charge-card.empty {
+            opacity: 0.45;
+        }
+
+        /* Total bar */
+        .total-bar {
+            margin-top: 16px;
+            border-radius: var(--radius-sm);
+            background: linear-gradient(135deg, var(--accent), #9c8fff);
+            padding: 16px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 20px var(--accent-glow);
+        }
+
+        .total-bar-label {
+            font-size: 0.88rem;
+            font-weight: 600;
+            opacity: 0.85;
+        }
+
+        .total-bar-value {
+            font-size: 1.4rem;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* Detail breakdown */
+        .breakdown-section {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .breakdown-card {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            overflow: hidden;
+        }
+
+        .breakdown-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 16px;
+            border-bottom: 1px solid transparent;
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.15s;
+        }
+
+        .breakdown-header:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .breakdown-card.open .breakdown-header {
+            border-bottom-color: var(--border);
+        }
+
+        .breakdown-icon {
+            font-size: 1.2rem;
+            flex-shrink: 0;
+        }
+
+        .breakdown-name {
+            font-size: 0.82rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            flex: 1;
+        }
+
+        .breakdown-total {
+            font-size: 1rem;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .breakdown-chevron {
+            font-size: 0.75rem;
+            color: var(--muted);
+            margin-left: 6px;
+            transition: transform 0.2s;
+        }
+
+        .breakdown-card.open .breakdown-chevron {
+            transform: rotate(90deg);
+        }
+
+        .breakdown-rows {
+            display: none;
+        }
+
+        .breakdown-card.open .breakdown-rows {
+            display: block;
+        }
+
+        .breakdown-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 9px 16px 9px 44px;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.85rem;
+        }
+
+        .breakdown-row:last-child {
+            border-bottom: none;
+        }
+
+        .breakdown-row-label {
+            color: var(--muted);
+            font-weight: 500;
+        }
+
+        .breakdown-row-label.strong {
+            color: var(--text);
+            font-weight: 700;
+        }
+
+        .breakdown-row-value {
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* Placeholder */
+        .placeholder {
+            text-align: center;
+            padding: 32px 16px;
+            color: var(--muted);
+            font-size: 0.88rem;
+        }
+
+        .placeholder-icon {
+            font-size: 2.5rem;
+            margin-bottom: 8px;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="card">
+        <div class="card-header">
+            <div class="header-icon">📊</div>
+            <h1>Opłaty miesięczne<small>Przegląd i rozbicie kosztów</small></h1>
+        </div>
+        <div class="divider"></div>
+
+        <!-- Month picker -->
+        <div class="field-group">
+            <label><span class="label-dot" style="background:#6c63ff;"></span>Miesiąc</label>
+            <div class="month-nav">
+                <button class="nav-arrow" onclick="shiftMonth(-1)" title="Poprzedni miesiąc">‹</button>
+                <input type="month" id="miesiac" />
+                <button class="nav-arrow" onclick="shiftMonth(1)" title="Następny miesiąc">›</button>
+            </div>
+        </div>
+
+        <!-- View toggle -->
+        <div class="view-toggle">
+            <button class="toggle-btn active" id="btn-summary" onclick="switchView('summary')">📋 Podsumowanie</button>
+            <button class="toggle-btn" id="btn-detail" onclick="switchView('detail')">🔍 Szczegółowo</button>
+        </div>
+
+        <!-- ── SUMMARY VIEW ──────────────────────────────────── -->
+        <div id="view-summary">
+            <div class="charge-cards" id="summary-cards">
+                <!-- populated by JS -->
+            </div>
+            <div class="total-bar">
+                <div class="total-bar-label">Łączna opłata</div>
+                <div class="total-bar-value" id="summary-total">— zł</div>
+            </div>
+            <button class="btn-copy" id="btn-copy" onclick="copyToClipboard()">📋 Kopiuj do schowka</button>
+        </div>
+
+        <!-- ── DETAIL VIEW ───────────────────────────────────── -->
+        <div id="view-detail" class="hidden">
+            <div class="breakdown-section" id="detail-cards">
+                <!-- populated by JS -->
+            </div>
+            <div class="total-bar" style="margin-top:16px;">
+                <div class="total-bar-label">Łączna opłata</div>
+                <div class="total-bar-value" id="detail-total">— zł</div>
+            </div>
+        </div>
+    </div>
+    <div id="toast"></div>
+
+    <script>
+        // ─── State ───────────────────────────────────────────────────────────────────
+        let rozlData = null;
+        let cennikData = null;
+        let mediaData = null;
+        let statOpData = null;  // Statyczne_op_aty
+        let rozlOdgData = null; // Rozliczenia_odgorne
+        let _initDone = false;
+
+        const TYPES = [
+            { typ: 'Gaz', icon: '🔥', color: 'var(--gas)', unit: 'm³' },
+            { typ: 'Woda', icon: '💧', color: 'var(--water)', unit: 'm³' },
+            { typ: 'Prąd', icon: '⚡', color: 'var(--electric)', unit: 'kWh' },
+        ];
+
+        // ─── Grist Bootstrap ─────────────────────────────────────────────────────────
+        grist.ready({ requiredAccess: 'full' });
+
+        grist.onRecords(async function () { await loadAll(); });
+
+        grist.onOptions(async function () {
+            if (!_initDone) {
+                _initDone = true;
+                const d = new Date();
+                document.getElementById('miesiac').value =
+                    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                document.getElementById('miesiac').addEventListener('change', renderAll);
+                await loadAll();
+            }
+        });
+
+        // ─── Load all tables ─────────────────────────────────────────────────────────
+        async function loadAll() {
+            try {
+                [rozlData, cennikData, mediaData, statOpData, rozlOdgData] = await Promise.all([
+                    grist.docApi.fetchTable('Rozliczenia'),
+                    grist.docApi.fetchTable('Cennik'),
+                    grist.docApi.fetchTable('Media'),
+                    grist.docApi.fetchTable('Statyczne_op_aty').catch(() => null),
+                    grist.docApi.fetchTable('Rozliczenia_odgorne').catch(() => null),
+                ]);
+                renderAll();
+            } catch (e) {
+                console.error('Load error:', e);
+            }
+        }
+
+        // ─── Month navigation ─────────────────────────────────────────────────────────
+        function shiftMonth(delta) {
+            const el = document.getElementById('miesiac');
+            const [y, m] = el.value.split('-').map(Number);
+            const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+            el.value = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+            renderAll();
+        }
+
+        // ─── Clipboard ────────────────────────────────────────────────────────────────
+        function copyToClipboard() {
+            const btn = document.getElementById('btn-copy');
+            const monthVal = document.getElementById('miesiac').value;
+            const [y, m] = (monthVal || '').split('-').map(Number);
+
+            // Collect values from rendered summary cards
+            function sumVal(typ) {
+                if (!rozlData) return null;
+                const rzRows = rows(rozlData).filter(r => {
+                    const d = new Date(r.Data_rozliczenia * 1000);
+                    return d.getUTCFullYear() === y && (d.getUTCMonth() + 1) === m;
+                });
+                const r = rzRows.find(r => {
+                    const t = typeof r.Typ === 'string' ? r.Typ : mediaTyp(r.Typ);
+                    return t === typ;
+                });
+                return r ? (r.sumaryczna_op_ata || 0) : null;
+            }
+
+            // Nieczystości — Statyczne_op_aty, wiersz Nazwa === 'Śmieci'
+            const gaz = sumVal('Gaz');
+            const prad = sumVal('Prąd');
+            const woda = getWodaOdg(y, m);
+            const niecz = getSmieci();
+            const total = [gaz, prad, woda, niecz].reduce((a, v) => a + (v ?? 0), 0);
+
+            function line(label, val) {
+                return label + ':\t\t' + (val !== null ? Number(val).toFixed(2) : '—') + 'zł';
+            }
+
+            const text = [
+                line('gaz', gaz),
+                line('prąd', prad),
+                line('woda', woda),
+                line('nieczystości', niecz),
+                '----',
+                line('suma', total),
+            ].join('\n');
+
+            navigator.clipboard.writeText(text).then(() => {
+                btn.textContent = '✅ Skopiowano!';
+                btn.classList.add('copied');
+                setTimeout(() => {
+                    btn.textContent = '📋 Kopiuj do schowka';
+                    btn.classList.remove('copied');
+                }, 2000);
+            }).catch(() => {
+                btn.textContent = '❌ Błąd schowka';
+                setTimeout(() => { btn.textContent = '📋 Kopiuj do schowka'; }, 2000);
+            });
+        }
+
+        // ─── Render ──────────────────────────────────────────────────────────────────
+        function renderAll() {
+            const monthVal = document.getElementById('miesiac').value; // "YYYY-MM"
+            if (!monthVal || !rozlData) return;
+
+            const [y, m] = monthVal.split('-').map(Number);
+
+            // Get Rozliczenia records for this month
+            const rozlRows = rows(rozlData).filter(r => {
+                if (!r.Data_rozliczenia) return false;
+                const d = new Date(r.Data_rozliczenia * 1000);
+                return d.getUTCFullYear() === y && (d.getUTCMonth() + 1) === m;
+            });
+
+            // Build per-type data
+            const byTyp = {};
+            TYPES.forEach(t => { byTyp[t.typ] = null; });
+
+            rozlRows.forEach(r => {
+                // Typ is a formula field — may be stored as Media ref id or string
+                let typ = null;
+                if (typeof r.Typ === 'string') {
+                    typ = r.Typ;
+                } else if (typeof r.Typ === 'number') {
+                    typ = mediaTyp(r.Typ);
+                }
+                // fallback: derive from Nazwa_roliczenia
+                if (!typ && r.Nazwa_roliczenia) {
+                    for (const t of TYPES) {
+                        if (r.Nazwa_roliczenia.includes(t.typ)) { typ = t.typ; break; }
+                    }
+                }
+                if (typ && byTyp.hasOwnProperty(typ)) byTyp[typ] = r;
+            });
+
+            renderSummary(byTyp);
+            renderDetail(byTyp);
+        }
+
+        // ─── Shared data helpers ──────────────────────────────────────────────────────
+        function getWodaOdg(y, m) {
+            if (!rozlOdgData || !rozlOdgData.id) return null;
+            const idx = rozlOdgData.id.findIndex((_, i) => {
+                const rawTyp = rozlOdgData.Typ[i];
+                // Typ can be a plain string 'Woda' or a Media ref id
+                const typStr = (typeof rawTyp === 'string') ? rawTyp : mediaTyp(rawTyp);
+                if (typStr !== 'Woda') return false;
+                const d = new Date(rozlOdgData.Data[i] * 1000);
+                return d.getUTCFullYear() === y && (d.getUTCMonth() + 1) === m;
+            });
+            return idx >= 0 ? (rozlOdgData.Wartosc[idx] ?? null) : null;
+        }
+
+        function getSmieci() {
+            if (!statOpData || !statOpData.id) return null;
+            const idx = statOpData.Nazwa
+                ? statOpData.Nazwa.findIndex(n => n && n.toLowerCase() === 'śmieci')
+                : -1;
+            return idx >= 0 ? (statOpData.Wartosc[idx] ?? null) : null;
+        }
+
+        // ── Summary view ─────────────────────────────────────────────────────────────
+        function renderSummary(byTyp) {
+            const monthVal = document.getElementById('miesiac').value;
+            const [y, m] = (monthVal || '').split('-').map(Number);
+            const container = document.getElementById('summary-cards');
+            container.innerHTML = '';
+            let grandTotal = 0;
+            let hasAny = false;
+
+            function addCard(icon, color, name, metaText, total) {
+                if (total !== null) { grandTotal += total; hasAny = true; }
+                const card = document.createElement('div');
+                card.className = 'charge-card' + (total !== null ? '' : ' empty');
+                card.innerHTML = `
+        <div class="charge-icon">${icon}</div>
+        <div class="charge-info">
+          <div class="charge-name" style="color:${color};">${name}</div>
+          <div class="charge-meta">${metaText}</div>
+        </div>
+        <div class="charge-amount" style="color:${color};">
+          ${total !== null ? fmt(total) + ' zł' : '— zł'}
+        </div>`;
+                container.appendChild(card);
+            }
+
+            // Gaz, Prąd from Rozliczenia
+            TYPES.filter(t => t.typ !== 'Woda').forEach(({ typ, icon, color, unit }) => {
+                const r = byTyp[typ];
+                const total = r ? (r.sumaryczna_op_ata || 0) : null;
+                const zuzycie = r ? (r.zuzycie_medium || 0) : null;
+                const meta = r
+                    ? `${fmt(zuzycie)} ${unit} · ${fmt(r.uzyta_taryfa ? cennikRate(r.uzyta_taryfa, typ) : null)} zł/${unit}`
+                    : 'brak rozliczenia';
+                addCard(icon, color, typ, meta, total);
+            });
+
+            // Woda from Rozliczenia_odgorne
+            const woda = getWodaOdg(y, m);
+            addCard('💧', 'var(--water)', 'Woda', woda !== null ? 'rozliczenie odgórne' : 'brak danych', woda);
+
+            // Śmieci from Statyczne_op_aty
+            const smieci = getSmieci();
+            addCard('🗑️', 'var(--muted)', 'Śmieci', smieci !== null ? 'opłata stała' : 'brak danych', smieci);
+
+            document.getElementById('summary-total').textContent =
+                hasAny ? fmt(grandTotal) + ' zł' : '— zł';
+        }
+
+        // ── Detail view ───────────────────────────────────────────────────────────────
+        function renderDetail(byTyp) {
+            const monthVal = document.getElementById('miesiac').value;
+            const [y, m] = (monthVal || '').split('-').map(Number);
+            const container = document.getElementById('detail-cards');
+            container.innerHTML = '';
+            let grandTotal = 0;
+            let hasAny = false;
+
+            function addBreakdown(id, icon, color, name, total, extraRows) {
+                if (total !== null) { grandTotal += total; hasAny = true; }
+                const card = document.createElement('div');
+                card.className = 'breakdown-card';
+                card.id = id;
+                card.innerHTML = `
+        <div class="breakdown-header" onclick="toggleBreakdown('${id}')">
+          <div class="breakdown-icon">${icon}</div>
+          <div class="breakdown-name" style="color:${color};">${name}</div>
+          <div class="breakdown-total" style="color:${color};">
+            ${total !== null ? fmt(total) + ' zł' : '— zł'}
+          </div>
+          <span class="breakdown-chevron">▶</span>
+        </div>
+        <div class="breakdown-rows">${extraRows}</div>`;
+                container.appendChild(card);
+            }
+
+            // Gaz, Prąd from Rozliczenia
+            TYPES.filter(t => t.typ !== 'Woda').forEach(({ typ, icon, color, unit }) => {
+                const r = byTyp[typ];
+                const total = r ? (r.sumaryczna_op_ata || 0) : null;
+                const rate = r ? cennikRate(r.uzyta_taryfa, typ) : null;
+                const rateStala = r ? cennikRateStala(r.uzyta_taryfa) : null;
+                addBreakdown('bc-' + typ, icon, color, typ, total, [
+                    row('Zużycie', r ? fmt(r.zuzycie_medium) + ' ' + unit : '—'),
+                    row('Stawka za jednostkę', rate !== null ? fmt(rate) + ' zł/' + unit : '—'),
+                    row('Miesięcy rozliczenia', r ? (r.Miesiace_od_ostatniego_rozliczenia || 0) : '—'),
+                    row('Opłata stała mies.', rateStala !== null ? fmt(rateStala) + ' zł/mies.' : '—'),
+                    row('Opłata zmienna', r ? fmt(r.Op_ata_za_jednostki) + ' zł' : '—'),
+                    row('Opłata stała', r ? fmt(r.Op_ata_sta_a_miesieczna_) + ' zł' : '—'),
+                    row('Data rozliczenia', r ? gristDateToISO(r.Data_rozliczenia) : '—'),
+                    row('Razem', r ? fmt(r.sumaryczna_op_ata) + ' zł' : '—', color),
+                ].join(''));
+            });
+
+            // Woda from Rozliczenia_odgorne
+            const woda = getWodaOdg(y, m);
+            addBreakdown('bc-Woda', '💧', 'var(--water)', 'Woda', woda, [
+                row('Typ', 'Rozliczenie odgórne'),
+                row('Razem', woda !== null ? fmt(woda) + ' zł' : '—', 'var(--water)'),
+            ].join(''));
+
+            // Śmieci from Statyczne_op_aty
+            const smieci = getSmieci();
+            addBreakdown('bc-Smieci', '🗑️', 'var(--muted)', 'Śmieci', smieci, [
+                row('Typ', 'Opłata stała'),
+                row('Razem', smieci !== null ? fmt(smieci) + ' zł' : '—', 'var(--muted)'),
+            ].join(''));
+
+            if (!hasAny) {
+                container.innerHTML = `<div class="placeholder">
+        <div class="placeholder-icon">💭</div>
+        Brak rozliczeń dla wybranego miesiąca
+      </div>`;
+            }
+
+            document.getElementById('detail-total').textContent =
+                hasAny ? fmt(grandTotal) + ' zł' : '— zł';
+        }
+
+        function row(label, value, color) {
+            const valStyle = color ? `style="color:${color}; font-weight:700;"` : '';
+            const lblClass = color ? 'breakdown-row-label strong' : 'breakdown-row-label';
+            return `<div class="breakdown-row">
+      <span class="${lblClass}">${label}</span>
+      <span class="breakdown-row-value" ${valStyle}>${value}</span>
+    </div>`;
+        }
+
+        // ─── Helpers ─────────────────────────────────────────────────────────────────
+        function rows(table) {
+            if (!table || !table.id) return [];
+            return table.id.map((id, i) => {
+                const r = { id };
+                for (const [k, arr] of Object.entries(table)) if (k !== 'id') r[k] = arr[i];
+                return r;
+            });
+        }
+
+        function mediaTyp(id) {
+            if (!mediaData) return '';
+            const i = mediaData.id.indexOf(id);
+            return i >= 0 ? mediaData.Typ[i] : '';
+        }
+
+        function cennikRate(taryfaId, typ) {
+            if (!cennikData || !taryfaId) return null;
+            const i = cennikData.id.indexOf(taryfaId);
+            if (i < 0) return null;
+            return cennikData.Op_ata_za_jednostke ? cennikData.Op_ata_za_jednostke[i] : null;
+        }
+
+        function cennikRateStala(taryfaId) {
+            if (!cennikData || !taryfaId) return null;
+            const i = cennikData.id.indexOf(taryfaId);
+            if (i < 0) return null;
+            return cennikData.Op_ata_Sta_a_Miesieczna ? cennikData.Op_ata_Sta_a_Miesieczna[i] : null;
+        }
+
+        function switchView(view) {
+            document.getElementById('view-summary').classList.toggle('hidden', view !== 'summary');
+            document.getElementById('view-detail').classList.toggle('hidden', view !== 'detail');
+            document.getElementById('btn-summary').classList.toggle('active', view === 'summary');
+            document.getElementById('btn-detail').classList.toggle('active', view === 'detail');
+        }
+
+        function toggleBreakdown(id) { document.getElementById(id).classList.toggle('open'); }
+
+        function fmt(n) { return (n === null || n === undefined || isNaN(n)) ? '—' : Number(n).toFixed(2); }
+
+        function gristDateToISO(v) {
+            if (!v) return '—';
+            const d = new Date(v * 1000);
+            return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+        }
+    </script>
+</body>
+
+</html>

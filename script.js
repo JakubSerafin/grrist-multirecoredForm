@@ -9,7 +9,7 @@ let allRecords = [];    // live snapshot of all table rows
 
 // ─── Grist Bootstrap ─────────────────────────────────────────────────────────
 grist.ready({
-    requiredAccess: 'read table',
+    requiredAccess: 'full',
     columns: []  // no column mapping – we write directly by column name
 });
 
@@ -146,8 +146,6 @@ async function saveRecords() {
             Data: gristDate,
             Stan_licznika: stanNum,
             Typ_licznika: typId,
-            //Przyrost_od_ostatniego_zczytania: przyrost,
-            Nazwa: `${dateLabel} ${typStr}`
         };
     }
 
@@ -225,13 +223,8 @@ async function getTableName() {
     if (tableName) return tableName;
 
     try {
-        const widget = await grist.getTable().catch(() => null);
-        if (widget) { tableName = widget.tableId; return tableName; }
-    } catch { }
-
-    try {
-        const sel = await grist.getSelectedTable().catch(() => null);
-        if (sel && sel.tableId) { tableName = sel.tableId; return tableName; }
+        const sel = await grist.selectedTable.getTableId().catch(() => null);
+        if (sel) { tableName = sel; return tableName; }
     } catch { }
 
     return null;

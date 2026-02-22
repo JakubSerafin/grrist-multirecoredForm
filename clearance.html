@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="pl">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Rozliczenie liczników</title>
+
+    <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="style.css" />
+
+    <style>
+        .meter-block {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            overflow: hidden;
+        }
+
+        .meter-block-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 11px 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .meter-block-icon {
+            font-size: 1.3rem;
+            flex-shrink: 0;
+        }
+
+        .meter-block-title {
+            font-size: 0.82rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .meter-block-body {
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+        }
+
+        .meter-row {
+            display: flex;
+            align-items: center;
+            padding: 10px 16px;
+            border-bottom: 1px solid var(--border);
+            gap: 12px;
+        }
+
+        .meter-row:last-child {
+            border-bottom: none;
+        }
+
+        .meter-row-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            flex-shrink: 0;
+            min-width: 120px;
+        }
+
+        .meter-row select {
+            flex: 1;
+            background: transparent;
+            border: none;
+            border-bottom: 1px solid transparent;
+            color: var(--text);
+            font-family: inherit;
+            font-size: 0.9rem;
+            font-weight: 600;
+            padding: 2px 0;
+            outline: none;
+            transition: border-color 0.2s;
+            cursor: pointer;
+        }
+
+        .meter-row select:focus {
+            border-bottom-color: var(--accent);
+        }
+
+        .meter-row select option {
+            background: var(--surface2);
+        }
+
+        .meters {
+            gap: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="card">
+        <div class="card-header">
+            <div class="header-icon">🧾</div>
+            <h1>Rozliczenie<small>Wybierz cennik i poprzednie rozliczenie</small></h1>
+        </div>
+        <div class="divider"></div>
+
+        <!-- Date -->
+        <div class="field-group">
+            <label><span class="label-dot" style="background:#6c63ff;"></span>Data rozliczenia</label>
+            <input type="date" id="data" />
+        </div>
+
+        <!-- Per-type selectors -->
+        <div class="field-group">
+            <label><span class="label-dot" style="background:var(--muted);"></span>Konfiguracja</label>
+            <div class="meters">
+
+                <!-- Gas -->
+                <div class="meter-block">
+                    <div class="meter-block-header">
+                        <span class="meter-block-icon">🔥</span>
+                        <span class="meter-block-title" style="color:var(--gas);">Gaz</span>
+                    </div>
+                    <div class="meter-block-body">
+                        <div class="meter-row">
+                            <span class="meter-row-label">Cennik</span>
+                            <select id="gaz-taryfa">
+                                <option value="">— wybierz —</option>
+                            </select>
+                        </div>
+                        <div class="meter-row">
+                            <span class="meter-row-label">Poprz. rozliczenie</span>
+                            <select id="gaz-prev">
+                                <option value="">— brak / pierwsze —</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Electricity -->
+                <div class="meter-block">
+                    <div class="meter-block-header">
+                        <span class="meter-block-icon">⚡</span>
+                        <span class="meter-block-title" style="color:var(--electric);">Prąd</span>
+                    </div>
+                    <div class="meter-block-body">
+                        <div class="meter-row">
+                            <span class="meter-row-label">Cennik</span>
+                            <select id="prad-taryfa">
+                                <option value="">— wybierz —</option>
+                            </select>
+                        </div>
+                        <div class="meter-row">
+                            <span class="meter-row-label">Poprz. rozliczenie</span>
+                            <select id="prad-prev">
+                                <option value="">— brak / pierwsze —</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <button class="btn-save" id="btn-save" onclick="saveRozliczenia()">
+            <span class="btn-icon">💾</span>
+            <span class="btn-text">Zapisz rozliczenie</span>
+            <div class="spinner"></div>
+        </button>
+        <div id="status"></div>
+    </div>
+    <div id="toast"></div>
+
+    <script>
+        // ─── State ───────────────────────────────────────────────────────────────────
+        let cennikData = null;
+        let rozlData = null;
+        let mediaData = null;
+
+        // ─── Grist Bootstrap ─────────────────────────────────────────────────────────
+        grist.ready({ requiredAccess: 'full' });
+
+        let _loaded = false;
+        grist.onRecords(async function () {
+            // Reload reference data when table changes (e.g. after a save)
+            await loadAll();
+        });
+
+        // Wait for Grist ready before first fetch
+        grist.onOptions(async function () {
+            if (!_loaded) {
+                _loaded = true;
+                document.getElementById('data').value = todayISO();
+                document.getElementById('data').addEventListener('change', () => autoSelect(true));
+                await loadAll();
+            }
+        });
+
+        // ─── Load ────────────────────────────────────────────────────────────────────
+        async function loadAll() {
+            try {
+                [cennikData, rozlData, mediaData] = await Promise.all([
+                    grist.docApi.fetchTable('Cennik'),
+                    grist.docApi.fetchTable('Rozliczenia'),
+                    grist.docApi.fetchTable('Media'),
+                ]);
+                populateSelects();
+                autoSelect();
+            } catch (e) {
+                showStatus('❌ Błąd pobierania danych: ' + (e.message || e), 'error');
+            }
+        }
+
+        // ─── Populate dropdowns ───────────────────────────────────────────────────────
+        function populateSelects() {
+            const cennikRows = tableRows(cennikData);
+            const rozlRows = tableRows(rozlData);
+
+            // Cennik selects
+            for (const [typ, prefix] of [['Gaz', 'gaz'], ['Prąd', 'prad']]) {
+                const sel = document.getElementById(prefix + '-taryfa');
+                const prev = sel.value;
+                sel.innerHTML = '<option value="">— wybierz —</option>';
+
+                cennikRows
+                    .filter(r => mediaTyp(r.Typ) === typ)
+                    .sort((a, b) => b.Data_obowiazywania_od - a.Data_obowiazywania_od)
+                    .forEach(r => {
+                        const opt = document.createElement('option');
+                        opt.value = r.id;
+                        opt.textContent = r.Nazwa || `${typ} ${gristDateToISO(r.Data_obowiazywania_od)}`;
+                        sel.appendChild(opt);
+                    });
+
+                if (prev && sel.querySelector(`option[value="${prev}"]`)) sel.value = prev;
+            }
+
+            // Previous rozliczenie selects
+            for (const [typ, prefix] of [['Gaz', 'gaz'], ['Prąd', 'prad']]) {
+                const sel = document.getElementById(prefix + '-prev');
+                const prev = sel.value;
+                sel.innerHTML = '<option value="">— brak / pierwsze —</option>';
+
+                rozlRows
+                    .filter(r => {
+                        const t = typeof r.Typ === 'string' ? r.Typ : mediaTyp(r.Typ);
+                        return t === typ;
+                    })
+                    .sort((a, b) => b.Data_rozliczenia - a.Data_rozliczenia)
+                    .forEach(r => {
+                        const opt = document.createElement('option');
+                        opt.value = r.id;
+                        opt.textContent = r.Nazwa_roliczenia || gristDateToISO(r.Data_rozliczenia);
+                        sel.appendChild(opt);
+                    });
+
+                if (prev && sel.querySelector(`option[value="${prev}"]`)) sel.value = prev;
+            }
+        }
+
+        // ─── Auto-select best defaults for selected date ──────────────────────────────
+        // force=true → always override current value (called on date change)
+        // force=false → only fill if empty (called after populate)
+        function autoSelect(force = false) {
+            const dateVal = document.getElementById('data').value;
+            if (!dateVal || !cennikData || !rozlData) return;
+            const gristDate = isoToGristDate(dateVal);
+
+            for (const [typ, prefix] of [['Gaz', 'gaz'], ['Prąd', 'prad']]) {
+                // Best cennik: latest with Data_obowiazywania_od <= date
+                const cennikSel = document.getElementById(prefix + '-taryfa');
+                if (force || !cennikSel.value) {
+                    const best = tableRows(cennikData)
+                        .filter(r => mediaTyp(r.Typ) === typ && r.Data_obowiazywania_od <= gristDate)
+                        .sort((a, b) => b.Data_obowiazywania_od - a.Data_obowiazywania_od)[0];
+                    if (best) cennikSel.value = String(best.id);
+                }
+
+                // Best poprzednie: latest Rozliczenie of same type with date < selected
+                const prevSel = document.getElementById(prefix + '-prev');
+                if (force || !prevSel.value) {
+                    const best = tableRows(rozlData)
+                        .filter(r => {
+                            const t = typeof r.Typ === 'string' ? r.Typ : mediaTyp(r.Typ);
+                            return t === typ && r.Data_rozliczenia < gristDate;
+                        })
+                        .sort((a, b) => b.Data_rozliczenia - a.Data_rozliczenia)[0];
+                    if (best) prevSel.value = String(best.id);
+                }
+            }
+        }
+
+        // ─── Save ─────────────────────────────────────────────────────────────────────
+        async function saveRozliczenia() {
+            const btn = document.getElementById('btn-save');
+            const dateVal = document.getElementById('data').value;
+            if (!dateVal) { showStatus('⚠️ Wybierz datę.', 'error'); return; }
+
+            const gristDate = isoToGristDate(dateVal);
+            const actions = [];
+
+            for (const [typ, prefix] of [['Gaz', 'gaz'], ['Prąd', 'prad']]) {
+                const taryfaId = parseInt(document.getElementById(prefix + '-taryfa').value);
+                if (!taryfaId) { showStatus(`⚠️ Wybierz cennik dla: ${typ}`, 'error'); return; }
+
+                const row = { Data_rozliczenia: gristDate, uzyta_taryfa: taryfaId };
+
+                const prevId = parseInt(document.getElementById(prefix + '-prev').value);
+                if (prevId) row.Poprzednie_rozliczenie = prevId;
+
+                actions.push(['AddRecord', 'Rozliczenia', null, row]);
+            }
+
+            btn.classList.add('loading'); btn.disabled = true;
+            showStatus('', '');
+
+            try {
+                await grist.docApi.applyUserActions(actions);
+                showStatus(`✅ Zapisano ${actions.length} rozliczenia.`, 'success');
+                showToast('✅ Rozliczenie zapisane', 'success');
+                // Reset prev selects so next time auto-selects latest
+                ['gaz-prev', 'prad-prev'].forEach(id => document.getElementById(id).value = '');
+                await loadAll();
+            } catch (err) {
+                showStatus('❌ Błąd: ' + (err.message || err), 'error');
+                showToast('❌ Błąd zapisu', 'error');
+            } finally {
+                btn.classList.remove('loading'); btn.disabled = false;
+            }
+        }
+
+        // ─── Utilities ────────────────────────────────────────────────────────────────
+        function tableRows(table) {
+            if (!table || !table.id) return [];
+            return table.id.map((id, i) => {
+                const r = { id };
+                for (const [k, arr] of Object.entries(table)) if (k !== 'id') r[k] = arr[i];
+                return r;
+            });
+        }
+
+        function mediaTyp(id) {
+            if (!mediaData) return '';
+            const i = mediaData.id.indexOf(id);
+            return i >= 0 ? mediaData.Typ[i] : '';
+        }
+
+        function todayISO() {
+            const d = new Date();
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+
+        function isoToGristDate(s) {
+            const [y, m, d] = s.split('-').map(Number);
+            return Date.UTC(y, m - 1, d) / 1000;
+        }
+
+        function gristDateToISO(v) {
+            if (!v) return '?';
+            const d = new Date(v * 1000);
+            return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+        }
+
+        function showStatus(msg, type) {
+            const e = document.getElementById('status');
+            e.textContent = msg; e.className = type || '';
+            e.style.display = type ? 'block' : 'none';
+        }
+
+        let toastTimer;
+        function showToast(msg, type) {
+            const e = document.getElementById('toast');
+            e.textContent = msg;
+            e.className = (type === 'success' ? 'success' : 'error') + ' show';
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => e.classList.remove('show'), 3500);
+        }
+    </script>
+</body>
+
+</html>

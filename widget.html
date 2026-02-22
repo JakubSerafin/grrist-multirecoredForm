@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Odczyt liczników</title>
+  <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d2e;
+      --surface2: #252840;
+      --accent: #6c63ff;
+      --accent-glow: rgba(108, 99, 255, 0.25);
+      --text: #e8eaf6;
+      --muted: #8b90b8;
+      --border: rgba(108, 99, 255, 0.2);
+      --success: #43e97b;
+      --error: #f7797d;
+      --gas: #ff9a3c;
+      --water: #38bdf8;
+      --electric: #facc15;
+      --radius: 14px;
+      --radius-sm: 8px;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 100vh;
+      padding: 24px 16px 40px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: 0 8px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.03);
+      padding: 32px;
+      width: 100%;
+      max-width: 480px;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+
+    .header-icon {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, var(--accent), #9c8fff);
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      flex-shrink: 0;
+      box-shadow: 0 4px 16px var(--accent-glow);
+    }
+
+    h1 {
+      font-size: 1.2rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    h1 small {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 400;
+      color: var(--muted);
+      margin-top: 2px;
+      letter-spacing: 0;
+    }
+
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 0 0 24px;
+    }
+
+    /* Field groups */
+    .field-group {
+      margin-bottom: 18px;
+    }
+
+    label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 8px;
+    }
+
+    .label-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .input-wrap {
+      position: relative;
+    }
+
+    .input-wrap .unit {
+      position: absolute;
+      right: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--muted);
+      pointer-events: none;
+    }
+
+    input[type="date"],
+    input[type="number"] {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-size: 1rem;
+      font-family: inherit;
+      font-weight: 500;
+      padding: 12px 16px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      outline: none;
+      -webkit-appearance: none;
+    }
+
+    input[type="number"] { padding-right: 48px; }
+
+    input[type="date"]::-webkit-calendar-picker-indicator {
+      filter: invert(0.5) sepia(1) hue-rotate(200deg);
+      cursor: pointer;
+    }
+
+    input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    input::placeholder { color: var(--muted); opacity: 0.6; }
+
+    /* Meter cards */
+    .meters {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      margin-top: 8px;
+    }
+
+    .meter-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .meter-card:focus-within {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    .meter-icon {
+      font-size: 1.6rem;
+      flex-shrink: 0;
+      width: 40px;
+      text-align: center;
+    }
+
+    .meter-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .meter-name {
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }
+
+    .meter-input {
+      width: 100%;
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid var(--border);
+      border-radius: 0;
+      color: var(--text);
+      font-size: 1.1rem;
+      font-family: inherit;
+      font-weight: 600;
+      padding: 4px 0;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .meter-input:focus { border-bottom-color: var(--accent); box-shadow: none; }
+    .meter-input::placeholder { font-weight: 400; opacity: 0.4; }
+
+    .meter-unit {
+      font-size: 0.78rem;
+      font-weight: 500;
+      color: var(--muted);
+      flex-shrink: 0;
+      min-width: 32px;
+      text-align: right;
+    }
+
+    /* Button */
+    .btn-save {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      margin-top: 28px;
+      padding: 14px 20px;
+      background: linear-gradient(135deg, var(--accent), #9c8fff);
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 700;
+      font-family: inherit;
+      border: none;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      letter-spacing: -0.01em;
+      box-shadow: 0 4px 20px var(--accent-glow);
+      transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn-save:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 28px rgba(108,99,255,0.45);
+    }
+
+    .btn-save:active:not(:disabled) { transform: translateY(0); }
+
+    .btn-save:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .btn-save .btn-icon { font-size: 1.1rem; }
+
+    /* Toast */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 12px 22px;
+      border-radius: 999px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+      transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1), opacity 0.35s;
+      opacity: 0;
+      pointer-events: none;
+      white-space: nowrap;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #toast.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+
+    #toast.success { border-color: var(--success); }
+    #toast.error { border-color: var(--error); }
+
+    /* Last reading hint */
+    .last-hint {
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-top: 4px;
+      font-style: italic;
+    }
+
+    /* Spinner */
+    .spinner {
+      display: none;
+      width: 18px;
+      height: 18px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .btn-save.loading .spinner { display: block; }
+    .btn-save.loading .btn-text,
+    .btn-save.loading .btn-icon { display: none; }
+
+    /* Status bar */
+    #status {
+      margin-top: 16px;
+      padding: 10px 14px;
+      border-radius: var(--radius-sm);
+      font-size: 0.82rem;
+      font-weight: 500;
+      display: none;
+      line-height: 1.4;
+    }
+
+    #status.info {
+      background: rgba(108,99,255,0.12);
+      border: 1px solid rgba(108,99,255,0.3);
+      color: #a5b4fc;
+      display: block;
+    }
+
+    #status.error {
+      background: rgba(247,121,125,0.12);
+      border: 1px solid rgba(247,121,125,0.3);
+      color: #fca5a5;
+      display: block;
+    }
+
+    #status.success {
+      background: rgba(67,233,123,0.1);
+      border: 1px solid rgba(67,233,123,0.3);
+      color: #86efac;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <div class="card-header">
+    <div class="header-icon">🔢</div>
+    <h1>
+      Odczyt liczników
+      <small>Wprowadź stan liczników i zapisz</small>
+    </h1>
+  </div>
+  <div class="divider"></div>
+
+  <!-- Date field -->
+  <div class="field-group">
+    <label>
+      <span class="label-dot" style="background:#6c63ff;"></span>
+      Data odczytu
+    </label>
+    <input type="date" id="data" />
+  </div>
+
+  <!-- Meters -->
+  <div class="field-group">
+    <label>
+      <span class="label-dot" style="background:var(--muted);"></span>
+      Stan liczników
+    </label>
+    <div class="meters">
+
+      <!-- Gas -->
+      <div class="meter-card" id="card-gaz">
+        <div class="meter-icon">🔥</div>
+        <div class="meter-info">
+          <div class="meter-name" style="color:var(--gas);">Gaz</div>
+          <input class="meter-input" type="number" id="gaz" placeholder="np. 1056" min="0" step="0.001" />
+          <div class="last-hint" id="hint-gaz"></div>
+        </div>
+        <div class="meter-unit">m³</div>
+      </div>
+
+      <!-- Water -->
+      <div class="meter-card" id="card-woda">
+        <div class="meter-icon">💧</div>
+        <div class="meter-info">
+          <div class="meter-name" style="color:var(--water);">Woda</div>
+          <input class="meter-input" type="number" id="woda" placeholder="np. 342" min="0" step="0.001" />
+          <div class="last-hint" id="hint-woda"></div>
+        </div>
+        <div class="meter-unit">m³</div>
+      </div>
+
+      <!-- Electricity -->
+      <div class="meter-card" id="card-prad">
+        <div class="meter-icon">⚡</div>
+        <div class="meter-info">
+          <div class="meter-name" style="color:var(--electric);">Prąd</div>
+          <input class="meter-input" type="number" id="prad" placeholder="np. 4520" min="0" step="0.001" />
+          <div class="last-hint" id="hint-prad"></div>
+        </div>
+        <div class="meter-unit">kWh</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Save button -->
+  <button class="btn-save" id="btn-save" onclick="saveRecords()">
+    <span class="btn-icon">💾</span>
+    <span class="btn-text">Zapisz odczyty</span>
+    <div class="spinner"></div>
+  </button>
+
+  <!-- Status message -->
+  <div id="status"></div>
+</div>
+
+<!-- Toast notification -->
+<div id="toast"></div>
+
+<script>
+  // ─── State ───────────────────────────────────────────────────────────────────
+  /**
+   * Typ_licznika IDs we expect in the table.
+   * These will be resolved by scanning existing records.
+   * Fallback: Gaz=1, Prąd=2, Woda=3 (common defaults).
+   */
+  const TYP_MAP = { Gaz: null, 'Prąd': null, Woda: null };
+  let tableName = null;      // the table this widget is attached to
+  let allRecords = [];       // latest snapshot of all rows
+
+  // ─── Grist Bootstrap ─────────────────────────────────────────────────────────
+  grist.ready({
+    requiredAccess: 'full',
+    columns: []              // no column mapping needed – we write directly
+  });
+
+  // Learn which table we are bound to
+  grist.onOptions(function (options, interaction) {
+    // interaction.tableId is available from Grist
+  });
+
+  // Receive all records to find last readings & resolve Typ_licznika IDs
+  grist.onRecords(function (records) {
+    allRecords = records;
+    resolveTypIds(records);
+    updateHints(records);
+  });
+
+  // Also handle the case where the widget is not linked to any row
+  // and receives an empty record event
+  grist.onRecord(function () {});
+
+  // ─── Resolve Typ_licznika references ─────────────────────────────────────────
+  function resolveTypIds(records) {
+    records.forEach(function (r) {
+      const typ = r.Typ_licznika;
+      if (!typ) return;
+      // typ may be an object like {id:1, Typ:"Gaz"} or just a number (ref id)
+      if (typeof typ === 'object' && typ !== null && typ.Typ) {
+        const name = typ.Typ.trim();
+        if (name in TYP_MAP) TYP_MAP[name] = typ.id;
+      }
+    });
+  }
+
+  // ─── Show last readings as hints ─────────────────────────────────────────────
+  function updateHints(records) {
+    const last = { Gaz: null, 'Prąd': null, Woda: null };
+
+    records.forEach(function (r) {
+      const typ = typNazwa(r.Typ_licznika);
+      if (!typ || !(typ in last)) return;
+      const d = dateOf(r.Data);
+      if (!last[typ] || d > dateOf(last[typ].Data)) {
+        last[typ] = r;
+      }
+    });
+
+    setHint('hint-gaz',  last['Gaz']);
+    setHint('hint-woda', last['Woda']);
+    setHint('hint-prad', last['Prąd']);
+  }
+
+  function setHint(id, rec) {
+    const el = document.getElementById(id);
+    if (!rec) { el.textContent = ''; return; }
+    const d = formatDatePL(rec.Data);
+    el.textContent = 'Ostatni odczyt: ' + rec.Stan_licznika + ' (' + d + ')';
+  }
+
+  function typNazwa(typ) {
+    if (!typ) return null;
+    if (typeof typ === 'object') return typ.Typ;
+    // if it's a number (reference id), look up in TYP_MAP
+    for (const [k, v] of Object.entries(TYP_MAP)) {
+      if (v === typ) return k;
+    }
+    return null;
+  }
+
+  // ─── Date helpers ─────────────────────────────────────────────────────────────
+  function todayISO() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${dd}`;
+  }
+
+  function dateOf(val) {
+    if (!val) return new Date(0);
+    if (typeof val === 'number') return new Date(val * 1000); // Grist epoch seconds
+    return new Date(val);
+  }
+
+  function formatDatePL(val) {
+    const d = dateOf(val);
+    if (!d || isNaN(d)) return '?';
+    return d.toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  }
+
+  /**
+   * Convert a YYYY-MM-DD string to a Grist date value.
+   * Grist stores Date columns as seconds since 1970-01-01 UTC (integer).
+   */
+  function isoToGristDate(isoStr) {
+    const [y, m, d] = isoStr.split('-').map(Number);
+    // midnight UTC
+    return Date.UTC(y, m - 1, d) / 1000;
+  }
+
+  // ─── Set default date ─────────────────────────────────────────────────────────
+  document.getElementById('data').value = todayISO();
+
+  // ─── Save records ─────────────────────────────────────────────────────────────
+  async function saveRecords() {
+    const btn = document.getElementById('btn-save');
+    const statusEl = document.getElementById('status');
+
+    // Gather values
+    const dataVal  = document.getElementById('data').value;
+    const gazVal   = document.getElementById('gaz').value.trim();
+    const wodaVal  = document.getElementById('woda').value.trim();
+    const pradVal  = document.getElementById('prad').value.trim();
+
+    // Validation
+    if (!dataVal) {
+      showStatus('⚠️ Wybierz datę odczytu.', 'error');
+      return;
+    }
+    if (gazVal === '' && wodaVal === '' && pradVal === '') {
+      showStatus('⚠️ Wprowadź przynajmniej jeden odczyt.', 'error');
+      return;
+    }
+
+    // Build rows
+    const rows = [];
+    const gristDate = isoToGristDate(dataVal);
+    const dateLabel = dataVal; // YYYY-MM-DD, used in Nazwa
+
+    function makeRow(typNazwa, stan, typId) {
+      const stanNum = parseFloat(stan);
+      if (isNaN(stanNum)) return null;
+
+      // Compute Przyrost_od_ostatniego_zczytania
+      let przyrost = 0;
+      const lastRec = getLastRecord(typNazwa);
+      if (lastRec !== null) {
+        przyrost = Math.max(0, stanNum - lastRec.Stan_licznika);
+      }
+
+      return {
+        Data: gristDate,
+        Stan_licznika: stanNum,
+        Typ_licznika: typId,
+        Przyrost_od_ostatniego_zczytania: przyrost,
+        Nazwa: `${dateLabel} ${typNazwa}`
+      };
+    }
+
+    function getLastRecord(typNazwaStr) {
+      let latest = null;
+      allRecords.forEach(function (r) {
+        const n = typNazwa(r.Typ_licznika);
+        if (n !== typNazwaStr) return;
+        const d = dateOf(r.Data);
+        if (!latest || d > dateOf(latest.Data)) latest = r;
+      });
+      return latest;
+    }
+
+    if (gazVal !== '') {
+      const typId = TYP_MAP['Gaz'] || await resolveOrCreateTyp('Gaz');
+      const row = makeRow('Gaz', gazVal, typId);
+      if (row) rows.push(row);
+    }
+    if (wodaVal !== '') {
+      const typId = TYP_MAP['Woda'] || await resolveOrCreateTyp('Woda');
+      const row = makeRow('Woda', wodaVal, typId);
+      if (row) rows.push(row);
+    }
+    if (pradVal !== '') {
+      const typId = TYP_MAP['Prąd'] || await resolveOrCreateTyp('Prąd');
+      const row = makeRow('Prąd', pradVal, typId);
+      if (row) rows.push(row);
+    }
+
+    if (rows.length === 0) {
+      showStatus('⚠️ Wprowadź prawidłowe liczby.', 'error');
+      return;
+    }
+
+    // Disable button, show loading
+    btn.classList.add('loading');
+    btn.disabled = true;
+    showStatus('', '');
+
+    try {
+      // Get table name from grist
+      const tbl = await getTableName();
+      if (!tbl) {
+        throw new Error('Nie można odczytać nazwy tabeli. Upewnij się, że widget jest podłączony do tabeli.');
+      }
+
+      // Build BulkAddOrUpdateRecord user actions
+      // We use AddRecord for each row (simplest approach)
+      const actions = rows.map(row => ['AddRecord', tbl, null, row]);
+      await grist.docApi.applyUserActions(actions);
+
+      showStatus(`✅ Zapisano ${rows.length} rekord${rows.length === 1 ? '' : rows.length < 5 ? 'y' : 'ów'}.`, 'success');
+      showToast('✅ Zapisano ' + rows.length + ' odczyt' + (rows.length === 1 ? '' : rows.length < 5 ? 'y' : 'ów'), 'success');
+
+      // Clear meter fields, keep date
+      document.getElementById('gaz').value = '';
+      document.getElementById('woda').value = '';
+      document.getElementById('prad').value = '';
+
+    } catch (err) {
+      console.error('Błąd zapisu:', err);
+      const msg = err && err.message ? err.message : String(err);
+      showStatus('❌ Błąd: ' + msg, 'error');
+      showToast('❌ Błąd zapisu', 'error');
+    } finally {
+      btn.classList.remove('loading');
+      btn.disabled = false;
+    }
+  }
+
+  // ─── Get bound table name ─────────────────────────────────────────────────────
+  async function getTableName() {
+    if (tableName) return tableName;
+    try {
+      // Ask Grist for full document info to find our tableId
+      const docData = await grist.docApi.fetchTable('_grist_Tables');
+      // _grist_Tables has columns: tableId, rawViewSectionRef, ...
+      // We need the table the widget is linked to.
+      // The easiest way: use grist.getTable() API if available
+      const widget = await grist.getTable().catch(() => null);
+      if (widget) {
+        tableName = widget.tableId;
+        return tableName;
+      }
+    } catch {}
+
+    // Fallback: try grist.selectedTable API
+    try {
+      const sel = await grist.getSelectedTable().catch(() => null);
+      if (sel && sel.tableId) {
+        tableName = sel.tableId;
+        return tableName;
+      }
+    } catch {}
+
+    // Last resort: ask via widgetAPI descriptor
+    try {
+      const info = await grist.docApi.fetchTable('_grist_Views_section');
+      // this is complex; skip and ask user to set table name below
+    } catch {}
+
+    return null;
+  }
+
+  // ─── Resolve or create Typ_licznika ──────────────────────────────────────────
+  async function resolveOrCreateTyp(typStr) {
+    // Try to fetch Typ_licznika table and find matching row
+    try {
+      const data = await grist.docApi.fetchTable('Typ_licznika');
+      if (data && data.id && data.Typ) {
+        for (let i = 0; i < data.id.length; i++) {
+          if (data.Typ[i] === typStr) {
+            TYP_MAP[typStr] = data.id[i];
+            return data.id[i];
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Could not fetch Typ_licznika table:', e);
+    }
+    // If not found, try to create it
+    try {
+      const result = await grist.docApi.applyUserActions([
+        ['AddRecord', 'Typ_licznika', null, { Typ: typStr }]
+      ]);
+      if (result && result.retValues && result.retValues[0]) {
+        const newId = result.retValues[0];
+        TYP_MAP[typStr] = newId;
+        return newId;
+      }
+    } catch (e) {
+      console.warn('Could not create Typ_licznika entry:', e);
+    }
+    // absolute fallback: use position in array (old default IDs)
+    const fallback = { Gaz: 1, 'Prąd': 2, Woda: 3 };
+    return fallback[typStr] || 1;
+  }
+
+  // ─── UI helpers ───────────────────────────────────────────────────────────────
+  function showStatus(msg, type) {
+    const el = document.getElementById('status');
+    el.textContent = msg;
+    el.className = type || '';
+    if (type) el.style.display = 'block';
+    else el.style.display = 'none';
+  }
+
+  let toastTimer = null;
+  function showToast(msg, type) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = type === 'success' ? 'success show' : 'error show';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      el.classList.remove('show');
+    }, 3500);
+  }
+
+  // ─── Table name detection via onOptions ───────────────────────────────────────
+  // Some versions of the API expose it through options interaction
+  grist.onOptions(function (options, interaction) {
+    if (interaction && interaction.tableId) {
+      tableName = interaction.tableId;
+    }
+  });
+</script>
+</body>
+</html>

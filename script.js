@@ -140,13 +140,13 @@ async function saveRecords() {
         if (isNaN(stanNum)) return null;
 
         const lastRec = getLastRecord(typStr);
-        const przyrost = lastRec ? Math.max(0, stanNum - lastRec.Stan_licznika) : 0;
+        //const przyrost = lastRec ? Math.max(0, stanNum - lastRec.Stan_licznika) : 0;
 
         return {
             Data: gristDate,
             Stan_licznika: stanNum,
             Typ_licznika: typId,
-            Przyrost_od_ostatniego_zczytania: przyrost,
+            //Przyrost_od_ostatniego_zczytania: przyrost,
             Nazwa: `${dateLabel} ${typStr}`
         };
     }
@@ -240,32 +240,32 @@ async function getTableName() {
 // ─── Resolve or create a Typ_licznika entry ───────────────────────────────────
 async function resolveOrCreateTyp(typStr) {
     // 1. Try to fetch from the reference table
-    try {
-        const data = await grist.docApi.fetchTable('Typ_licznika');
-        if (data && data.id && data.Typ) {
-            for (let i = 0; i < data.id.length; i++) {
-                if (data.Typ[i] === typStr) {
-                    TYP_MAP[typStr] = data.id[i];
-                    return data.id[i];
-                }
-            }
-        }
-    } catch (e) {
-        console.warn('Could not fetch Typ_licznika:', e);
-    }
+    // try {
+    //     const data = await grist.docApi.fetchTable('Typ_licznika');
+    //     if (data && data.id && data.Typ) {
+    //         for (let i = 0; i < data.id.length; i++) {
+    //             if (data.Typ[i] === typStr) {
+    //                 TYP_MAP[typStr] = data.id[i];
+    //                 return data.id[i];
+    //             }
+    //         }
+    //     }
+    // } catch (e) {
+    //     console.warn('Could not fetch Typ_licznika:', e);
+    // }
 
-    // 2. Create a new entry if not found
-    try {
-        const result = await grist.docApi.applyUserActions([
-            ['AddRecord', 'Typ_licznika', null, { Typ: typStr }]
-        ]);
-        if (result && result.retValues && result.retValues[0]) {
-            TYP_MAP[typStr] = result.retValues[0];
-            return result.retValues[0];
-        }
-    } catch (e) {
-        console.warn('Could not create Typ_licznika entry:', e);
-    }
+    // // 2. Create a new entry if not found
+    // try {
+    //     const result = await grist.docApi.applyUserActions([
+    //         ['AddRecord', 'Typ_licznika', null, { Typ: typStr }]
+    //     ]);
+    //     if (result && result.retValues && result.retValues[0]) {
+    //         TYP_MAP[typStr] = result.retValues[0];
+    //         return result.retValues[0];
+    //     }
+    // } catch (e) {
+    //     console.warn('Could not create Typ_licznika entry:', e);
+    // }
 
     // 3. Last-resort fallback IDs
     return { Gaz: 1, 'Prąd': 2, Woda: 3 }[typStr] || 1;

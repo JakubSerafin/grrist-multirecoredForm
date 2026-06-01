@@ -307,6 +307,41 @@
             font-variant-numeric: tabular-nums;
         }
 
+        /* Source picker */
+        .source-picker {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 4px;
+        }
+
+        .source-picker label {
+            font-size: 0.68rem;
+            color: var(--muted);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            flex-shrink: 0;
+        }
+
+        .source-picker select {
+            flex: 1;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text);
+            font-family: inherit;
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 3px 6px;
+            cursor: pointer;
+            outline: none;
+        }
+
+        .source-picker select:focus {
+            border-color: var(--accent);
+        }
+
         /* Placeholder */
         .placeholder {
             text-align: center;
@@ -384,6 +419,9 @@
         let rozlOdgData = null; // Rozliczenia_odgorne
         let _initDone = false;
 
+        // Persists user source choice per medium for current session
+        const sourceSelection = {}; // { 'Gaz': 'rozl'|'odg'|'stat', ... }
+
         const TYPES = [
             { typ: 'Gaz', icon: '🔥', color: 'var(--gas)', unit: 'm³' },
             { typ: 'Woda', icon: '💧', color: 'var(--water)', unit: 'm³' },
@@ -437,24 +475,13 @@
             const monthVal = document.getElementById('miesiac').value;
             const [y, m] = (monthVal || '').split('-').map(Number);
 
-            // Collect values from rendered summary cards
-            function sumVal(typ) {
-                if (!rozlData) return null;
-                const rzRows = rows(rozlData).filter(r => {
-                    const d = new Date(r.Data_rozliczenia * 1000);
-                    return d.getUTCFullYear() === y && (d.getUTCMonth() + 1) === m;
-                });
-                const r = rzRows.find(r => {
-                    const t = typeof r.Typ === 'string' ? r.Typ : mediaTyp(r.Typ);
-                    return t === typ;
-                });
-                return r ? (r.sumaryczna_op_ata || 0) : null;
-            }
-
             // Nieczystości — Statyczne_op_aty, wiersz Nazwa === 'Śmieci'
-            const gaz = sumVal('Gaz');
-            const prad = sumVal('Prąd');
-            const woda = getWodaOdg(y, m);
+            const gazSrc = getSelectedSource('Gaz', getAvailableSources('Gaz', y, m));
+            const pradSrc = getSelectedSource('Prąd', getAvailableSources('Prąd', y, m));
+            const wodaSrc = getSelectedSource('Woda', getAvailableSources('Woda', y, m));
+            const gaz = gazSrc ? gazSrc.value : null;
+            const prad = pradSrc ? pradSrc.value : null;
+            const woda = wodaSrc ? wodaSrc.value : null;
             const niecz = getSmieci();
             const total = [gaz, prad, woda, niecz].reduce((a, v) => a + (v ?? 0), 0);
 
@@ -486,67 +513,87 @@
 
         // ─── Render ──────────────────────────────────────────────────────────────────
         function renderAll() {
-            const monthVal = document.getElementById('miesiac').value; // "YYYY-MM"
-            if (!monthVal || !rozlData) return;
-
-            const [y, m] = monthVal.split('-').map(Number);
-
-            // Get Rozliczenia records for this month
-            const rozlRows = rows(rozlData).filter(r => {
-                if (!r.Data_rozliczenia) return false;
-                const d = new Date(r.Data_rozliczenia * 1000);
-                return d.getUTCFullYear() === y && (d.getUTCMonth() + 1) === m;
-            });
-
-            // Build per-type data
-            const byTyp = {};
-            TYPES.forEach(t => { byTyp[t.typ] = null; });
-
-            rozlRows.forEach(r => {
-                // Typ is a formula field — may be stored as Media ref id or string
-                let typ = null;
-                if (typeof r.Typ === 'string') {
-                    typ = r.Typ;
-                } else if (typeof r.Typ === 'number') {
-                    typ = mediaTyp(r.Typ);
-                }
-                // fallback: derive from Nazwa_roliczenia
-                if (!typ && r.Nazwa_roliczenia) {
-                    for (const t of TYPES) {
-                        if (r.Nazwa_roliczenia.includes(t.typ)) { typ = t.typ; break; }
-                    }
-                }
-                if (typ && byTyp.hasOwnProperty(typ)) byTyp[typ] = r;
-            });
-
-            renderSummary(byTyp);
-            renderDetail(byTyp);
+            const monthVal = document.getElementById('miesiac').value;
+            if (!monthVal) return;
+            renderSummary();
+            renderDetail();
         }
 
-        // ─── Shared data helpers ──────────────────────────────────────────────────────
-        function getWodaOdg(y, m) {
+        // ─── Source helpers ───────────────────────────────────────────────────────────
+
+        function getRozlRow(typ, y, m) {
+            if (!rozlData) return null;
+            return rows(rozlData).find(r => {
+                const t = typeof r.Typ === 'string' ? r.Typ : mediaTyp(r.Typ);
+                if (t !== typ) return false;
+                const d = new Date(r.Data_rozliczenia * 1000);
+                return d.getUTCFullYear() === y && (d.getUTCMonth() + 1) === m;
+            }) || null;
+        }
+
+        function getOdgValue(typ, y, m) {
             if (!rozlOdgData || !rozlOdgData.id) return null;
             const idx = rozlOdgData.id.findIndex((_, i) => {
                 const rawTyp = rozlOdgData.Typ[i];
-                // Typ can be a plain string 'Woda' or a Media ref id
                 const typStr = (typeof rawTyp === 'string') ? rawTyp : mediaTyp(rawTyp);
-                if (typStr !== 'Woda') return false;
+                if (typStr !== typ) return false;
                 const d = new Date(rozlOdgData.Data[i] * 1000);
                 return d.getUTCFullYear() === y && (d.getUTCMonth() + 1) === m;
             });
             return idx >= 0 ? (rozlOdgData.Wartosc[idx] ?? null) : null;
         }
 
+        function getStatValue(typ) {
+            if (!statOpData || !statOpData.id || !statOpData.Nazwa) return null;
+            const idx = statOpData.Nazwa.findIndex(n => n && n.toLowerCase() === typ.toLowerCase());
+            return idx >= 0 ? (statOpData.Wartosc[idx] ?? null) : null;
+        }
+
+        function getAvailableSources(typ, y, m) {
+            const sources = [];
+            const rozlRow = getRozlRow(typ, y, m);
+            if (rozlRow) sources.push({ key: 'rozl', label: 'Rozliczenie', value: rozlRow.sumaryczna_op_ata || 0, row: rozlRow });
+            const odgVal = getOdgValue(typ, y, m);
+            if (odgVal !== null) sources.push({ key: 'odg', label: 'Opłata odgórna', value: odgVal });
+            const statVal = getStatValue(typ);
+            if (statVal !== null) sources.push({ key: 'stat', label: 'Opłata stała', value: statVal });
+            return sources;
+        }
+
+        function getSelectedSource(typ, sources) {
+            if (sources.length === 0) return null;
+            const sel = sourceSelection[typ];
+            if (sel) {
+                const found = sources.find(s => s.key === sel);
+                if (found) return found;
+            }
+            return sources[0];
+        }
+
+        function onSourceChange(typ, key) {
+            sourceSelection[typ] = key;
+            renderAll();
+        }
+
+        function sourcePicker(typ, sources, selected) {
+            if (sources.length <= 1) return '';
+            const opts = sources.map(s =>
+                `<option value="${s.key}" ${s.key === selected.key ? 'selected' : ''}>${s.label}</option>`
+            ).join('');
+            return `<div class="source-picker">
+              <label>Źródło</label>
+              <select onchange="onSourceChange('${typ}', this.value)">${opts}</select>
+            </div>`;
+        }
+
         function getSmieci() {
-            if (!statOpData || !statOpData.id) return null;
-            const idx = statOpData.Nazwa
-                ? statOpData.Nazwa.findIndex(n => n && n.toLowerCase() === 'śmieci')
-                : -1;
+            if (!statOpData || !statOpData.id || !statOpData.Nazwa) return null;
+            const idx = statOpData.Nazwa.findIndex(n => n && n.toLowerCase() === 'śmieci');
             return idx >= 0 ? (statOpData.Wartosc[idx] ?? null) : null;
         }
 
         // ── Summary view ─────────────────────────────────────────────────────────────
-        function renderSummary(byTyp) {
+        function renderSummary() {
             const monthVal = document.getElementById('miesiac').value;
             const [y, m] = (monthVal || '').split('-').map(Number);
             const container = document.getElementById('summary-cards');
@@ -554,47 +601,50 @@
             let grandTotal = 0;
             let hasAny = false;
 
-            function addCard(icon, color, name, metaText, total) {
+            function addCard(icon, color, name, metaText, total, pickerHtml) {
                 if (total !== null) { grandTotal += total; hasAny = true; }
                 const card = document.createElement('div');
                 card.className = 'charge-card' + (total !== null ? '' : ' empty');
                 card.innerHTML = `
-        <div class="charge-icon">${icon}</div>
-        <div class="charge-info">
-          <div class="charge-name" style="color:${color};">${name}</div>
-          <div class="charge-meta">${metaText}</div>
-        </div>
-        <div class="charge-amount" style="color:${color};">
-          ${total !== null ? fmt(total) + ' zł' : '— zł'}
-        </div>`;
+          <div class="charge-icon">${icon}</div>
+          <div class="charge-info">
+            <div class="charge-name" style="color:${color};">${name}</div>
+            <div class="charge-meta">${metaText}</div>
+            ${pickerHtml || ''}
+          </div>
+          <div class="charge-amount" style="color:${color};">
+            ${total !== null ? fmt(total) + ' zł' : '— zł'}
+          </div>`;
                 container.appendChild(card);
             }
 
-            // Gaz, Prąd from Rozliczenia
-            TYPES.filter(t => t.typ !== 'Woda').forEach(({ typ, icon, color, unit }) => {
-                const r = byTyp[typ];
-                const total = r ? (r.sumaryczna_op_ata || 0) : null;
-                const zuzycie = r ? (r.zuzycie_medium || 0) : null;
-                const meta = r
-                    ? `${fmt(zuzycie)} ${unit} · ${fmt(r.uzyta_taryfa ? cennikRate(r.uzyta_taryfa, typ) : null)} zł/${unit}`
-                    : 'brak rozliczenia';
-                addCard(icon, color, typ, meta, total);
+            TYPES.forEach(({ typ, icon, color, unit }) => {
+                const sources = getAvailableSources(typ, y, m);
+                const src = getSelectedSource(typ, sources);
+                const total = src ? src.value : null;
+                let meta;
+                if (!src) {
+                    meta = 'brak danych';
+                } else if (src.key === 'rozl') {
+                    const zuzycie = src.row.zuzycie_medium || 0;
+                    const rate = cennikRate(src.row.uzyta_taryfa, typ);
+                    meta = `${fmt(zuzycie)} ${unit} · ${fmt(rate)} zł/${unit}`;
+                } else {
+                    meta = src.label;
+                }
+                addCard(icon, color, typ, meta, total, sourcePicker(typ, sources, src || {}));
             });
 
-            // Woda from Rozliczenia_odgorne
-            const woda = getWodaOdg(y, m);
-            addCard('💧', 'var(--water)', 'Woda', woda !== null ? 'rozliczenie odgórne' : 'brak danych', woda);
-
-            // Śmieci from Statyczne_op_aty
+            // Śmieci always from Statyczne_op_aty
             const smieci = getSmieci();
-            addCard('🗑️', 'var(--muted)', 'Śmieci', smieci !== null ? 'opłata stała' : 'brak danych', smieci);
+            addCard('🗑️', 'var(--muted)', 'Śmieci', smieci !== null ? 'opłata stała' : 'brak danych', smieci, '');
 
             document.getElementById('summary-total').textContent =
                 hasAny ? fmt(grandTotal) + ' zł' : '— zł';
         }
 
         // ── Detail view ───────────────────────────────────────────────────────────────
-        function renderDetail(byTyp) {
+        function renderDetail() {
             const monthVal = document.getElementById('miesiac').value;
             const [y, m] = (monthVal || '').split('-').map(Number);
             const container = document.getElementById('detail-cards');
@@ -602,61 +652,69 @@
             let grandTotal = 0;
             let hasAny = false;
 
-            function addBreakdown(id, icon, color, name, total, extraRows) {
+            function addBreakdown(id, icon, color, name, total, extraRows, pickerHtml) {
                 if (total !== null) { grandTotal += total; hasAny = true; }
                 const card = document.createElement('div');
                 card.className = 'breakdown-card';
                 card.id = id;
                 card.innerHTML = `
-        <div class="breakdown-header" onclick="toggleBreakdown('${id}')">
-          <div class="breakdown-icon">${icon}</div>
-          <div class="breakdown-name" style="color:${color};">${name}</div>
-          <div class="breakdown-total" style="color:${color};">
-            ${total !== null ? fmt(total) + ' zł' : '— zł'}
+          <div class="breakdown-header" onclick="toggleBreakdown('${id}')">
+            <div class="breakdown-icon">${icon}</div>
+            <div class="breakdown-name" style="color:${color};">${name}</div>
+            <div class="breakdown-total" style="color:${color};">
+              ${total !== null ? fmt(total) + ' zł' : '— zł'}
+            </div>
+            <span class="breakdown-chevron">▶</span>
           </div>
-          <span class="breakdown-chevron">▶</span>
-        </div>
-        <div class="breakdown-rows">${extraRows}</div>`;
+          <div class="breakdown-rows">
+            ${pickerHtml ? `<div style="padding:10px 16px 2px;">${pickerHtml}</div>` : ''}
+            ${extraRows}
+          </div>`;
                 container.appendChild(card);
             }
 
-            // Gaz, Prąd from Rozliczenia
-            TYPES.filter(t => t.typ !== 'Woda').forEach(({ typ, icon, color, unit }) => {
-                const r = byTyp[typ];
-                const total = r ? (r.sumaryczna_op_ata || 0) : null;
-                const rate = r ? cennikRate(r.uzyta_taryfa, typ) : null;
-                const rateStala = r ? cennikRateStala(r.uzyta_taryfa) : null;
-                addBreakdown('bc-' + typ, icon, color, typ, total, [
-                    row('Zużycie', r ? fmt(r.zuzycie_medium) + ' ' + unit : '—'),
-                    row('Stawka za jednostkę', rate !== null ? fmt(rate) + ' zł/' + unit : '—'),
-                    row('Miesięcy rozliczenia', r ? (r.Miesiace_od_ostatniego_rozliczenia || 0) : '—'),
-                    row('Opłata stała mies.', rateStala !== null ? fmt(rateStala) + ' zł/mies.' : '—'),
-                    row('Opłata zmienna', r ? fmt(r.Op_ata_za_jednostki) + ' zł' : '—'),
-                    row('Opłata stała', r ? fmt(r.Op_ata_sta_a_miesieczna_) + ' zł' : '—'),
-                    row('Data rozliczenia', r ? gristDateToISO(r.Data_rozliczenia) : '—'),
-                    row('Razem', r ? fmt(r.sumaryczna_op_ata) + ' zł' : '—', color),
-                ].join(''));
+            TYPES.forEach(({ typ, icon, color, unit }) => {
+                const sources = getAvailableSources(typ, y, m);
+                const src = getSelectedSource(typ, sources);
+                const total = src ? src.value : null;
+                let detailRows;
+                if (src && src.key === 'rozl') {
+                    const r = src.row;
+                    const rate = cennikRate(r.uzyta_taryfa, typ);
+                    const rateStala = cennikRateStala(r.uzyta_taryfa);
+                    detailRows = [
+                        row('Zużycie', fmt(r.zuzycie_medium) + ' ' + unit),
+                        row('Stawka za jednostkę', rate !== null ? fmt(rate) + ' zł/' + unit : '—'),
+                        row('Miesięcy rozliczenia', r.Miesiace_od_ostatniego_rozliczenia || 0),
+                        row('Opłata stała mies.', rateStala !== null ? fmt(rateStala) + ' zł/mies.' : '—'),
+                        row('Opłata zmienna', fmt(r.Op_ata_za_jednostki) + ' zł'),
+                        row('Opłata stała', fmt(r.Op_ata_sta_a_miesieczna_) + ' zł'),
+                        row('Data rozliczenia', gristDateToISO(r.Data_rozliczenia)),
+                        row('Razem', fmt(r.sumaryczna_op_ata) + ' zł', color),
+                    ].join('');
+                } else if (src) {
+                    detailRows = [
+                        row('Typ', src.label),
+                        row('Razem', fmt(src.value) + ' zł', color),
+                    ].join('');
+                } else {
+                    detailRows = row('', 'brak danych');
+                }
+                addBreakdown('bc-' + typ, icon, color, typ, total, detailRows, sourcePicker(typ, sources, src || {}));
             });
 
-            // Woda from Rozliczenia_odgorne
-            const woda = getWodaOdg(y, m);
-            addBreakdown('bc-Woda', '💧', 'var(--water)', 'Woda', woda, [
-                row('Typ', 'Rozliczenie odgórne'),
-                row('Razem', woda !== null ? fmt(woda) + ' zł' : '—', 'var(--water)'),
-            ].join(''));
-
-            // Śmieci from Statyczne_op_aty
+            // Śmieci always from Statyczne_op_aty
             const smieci = getSmieci();
             addBreakdown('bc-Smieci', '🗑️', 'var(--muted)', 'Śmieci', smieci, [
                 row('Typ', 'Opłata stała'),
                 row('Razem', smieci !== null ? fmt(smieci) + ' zł' : '—', 'var(--muted)'),
-            ].join(''));
+            ].join(''), '');
 
             if (!hasAny) {
                 container.innerHTML = `<div class="placeholder">
-        <div class="placeholder-icon">💭</div>
-        Brak rozliczeń dla wybranego miesiąca
-      </div>`;
+          <div class="placeholder-icon">💭</div>
+          Brak rozliczeń dla wybranego miesiąca
+        </div>`;
             }
 
             document.getElementById('detail-total').textContent =

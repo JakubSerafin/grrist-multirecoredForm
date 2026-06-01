@@ -28,6 +28,22 @@
             border-bottom: 1px solid var(--border);
         }
 
+        .meter-block.disabled {
+            opacity: 0.45;
+        }
+
+        .meter-block.disabled .meter-block-body {
+            pointer-events: none;
+        }
+
+        .meter-enable {
+            margin-left: auto;
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+            accent-color: var(--accent);
+        }
+
         .meter-block-icon {
             font-size: 1.3rem;
             flex-shrink: 0;
@@ -209,6 +225,7 @@
                     <div class="meter-block-header">
                         <span class="meter-block-icon">${meta.icon}</span>
                         <span class="meter-block-title" style="color:${meta.color};">${typ}</span>
+                        <input type="checkbox" class="meter-enable" checked title="Generuj rozliczenie" onchange="toggleBlock(this)">
                     </div>
                     <div class="meter-block-body">
                         <div class="meter-row">
@@ -265,6 +282,10 @@
             }
         }
 
+        function toggleBlock(checkbox) {
+            checkbox.closest('.meter-block').classList.toggle('disabled', !checkbox.checked);
+        }
+
         // ─── Save ─────────────────────────────────────────────────────────────────────
         async function saveRozliczenia() {
             const btn = document.getElementById('btn-save');
@@ -274,7 +295,7 @@
             const gristDate = isoToGristDate(dateVal);
             const actions = [];
 
-            const blocks = document.querySelectorAll('#meters-container .meter-block');
+            const blocks = document.querySelectorAll('#meters-container .meter-block:not(.disabled)');
             for (const block of blocks) {
                 const typ = block.dataset.typ;
                 const prefix = typ.toLowerCase().replace('ą', 'a').replace('ó', 'o');

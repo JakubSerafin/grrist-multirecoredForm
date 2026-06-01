@@ -619,20 +619,25 @@
             }
 
             TYPES.forEach(({ typ, icon, color, unit }) => {
-                const sources = getAvailableSources(typ, y, m);
-                const src = getSelectedSource(typ, sources);
-                const total = src ? src.value : null;
-                let meta;
-                if (!src) {
-                    meta = 'brak danych';
-                } else if (src.key === 'rozl') {
-                    const zuzycie = src.row.zuzycie_medium || 0;
-                    const rate = cennikRate(src.row.uzyta_taryfa, typ);
-                    meta = `${fmt(zuzycie)} ${unit} · ${fmt(rate)} zł/${unit}`;
-                } else {
-                    meta = src.label;
+                try {
+                    const sources = getAvailableSources(typ, y, m);
+                    const src = getSelectedSource(typ, sources);
+                    const total = src ? src.value : null;
+                    let meta;
+                    if (!src) {
+                        meta = 'brak danych';
+                    } else if (src.key === 'rozl') {
+                        const zuzycie = src.row.zuzycie_medium || 0;
+                        const rate = cennikRate(src.row.uzyta_taryfa, typ);
+                        meta = `${fmt(zuzycie)} ${unit} · ${fmt(rate)} zł/${unit}`;
+                    } else {
+                        meta = src.label;
+                    }
+                    addCard(icon, color, typ, meta, total, sourcePicker(typ, sources, src || {}));
+                } catch (e) {
+                    console.error('renderSummary error for', typ, e);
+                    addCard(icon, color, typ, 'błąd renderowania', null, '');
                 }
-                addCard(icon, color, typ, meta, total, sourcePicker(typ, sources, src || {}));
             });
 
             // Śmieci always from Statyczne_op_aty
@@ -674,36 +679,41 @@
             }
 
             TYPES.forEach(({ typ, icon, color, unit }) => {
-                const sources = getAvailableSources(typ, y, m);
-                const src = getSelectedSource(typ, sources);
-                const total = src ? src.value : null;
-                let detailRows;
-                if (src && src.key === 'rozl') {
-                    const r = src.row;
-                    const rate = cennikRate(r.uzyta_taryfa, typ);
-                    const rateStala = cennikRateStala(r.uzyta_taryfa);
-                    detailRows = [
-                        row('Zużycie', fmt(r.zuzycie_medium) + ' ' + unit),
-                        row('Stawka za jednostkę', rate !== null ? fmt(rate) + ' zł/' + unit : '—'),
-                        row('Miesięcy rozliczenia', r.Miesiace_od_ostatniego_rozliczenia || 0),
-                        row('Opłata stała mies.', rateStala !== null ? fmt(rateStala) + ' zł/mies.' : '—'),
-                        row('Opłata zmienna', fmt(r.Op_ata_za_jednostki) + ' zł'),
-                        row('Opłata stała', fmt(r.Op_ata_sta_a_miesieczna_) + ' zł'),
-                        row('Data rozliczenia', gristDateToISO(r.Data_rozliczenia)),
-                        row('Razem', fmt(r.sumaryczna_op_ata) + ' zł', color),
-                    ].join('');
-                } else if (src) {
-                    detailRows = [
-                        row('Typ', src.label),
-                        row('Razem', fmt(src.value) + ' zł', color),
-                    ].join('');
-                } else {
-                    detailRows = row('', 'brak danych');
+                try {
+                    const sources = getAvailableSources(typ, y, m);
+                    const src = getSelectedSource(typ, sources);
+                    const total = src ? src.value : null;
+                    let detailRows;
+                    if (src && src.key === 'rozl') {
+                        const r = src.row;
+                        const rate = cennikRate(r.uzyta_taryfa, typ);
+                        const rateStala = cennikRateStala(r.uzyta_taryfa);
+                        detailRows = [
+                            row('Zużycie', fmt(r.zuzycie_medium) + ' ' + unit),
+                            row('Stawka za jednostkę', rate !== null ? fmt(rate) + ' zł/' + unit : '—'),
+                            row('Miesięcy rozliczenia', r.Miesiace_od_ostatniego_rozliczenia || 0),
+                            row('Opłata stała mies.', rateStala !== null ? fmt(rateStala) + ' zł/mies.' : '—'),
+                            row('Opłata zmienna', fmt(r.Op_ata_za_jednostki) + ' zł'),
+                            row('Opłata stała', fmt(r.Op_ata_sta_a_miesieczna_) + ' zł'),
+                            row('Data rozliczenia', gristDateToISO(r.Data_rozliczenia)),
+                            row('Razem', fmt(r.sumaryczna_op_ata) + ' zł', color),
+                        ].join('');
+                    } else if (src) {
+                        detailRows = [
+                            row('Typ', src.label),
+                            row('Razem', fmt(src.value) + ' zł', color),
+                        ].join('');
+                    } else {
+                        detailRows = row('', 'brak danych');
+                    }
+                    addBreakdown('bc-' + typ, icon, color, typ, total, detailRows, sourcePicker(typ, sources, src || {}));
+                } catch (e) {
+                    console.error('renderDetail error for', typ, e);
+                    addBreakdown('bc-' + typ, icon, color, typ, null, row('', 'błąd renderowania'), '');
                 }
-                addBreakdown('bc-' + typ, icon, color, typ, total, detailRows, sourcePicker(typ, sources, src || {}));
             });
 
-            // Śmieci always from Statyczne_op_aty
+            // Śmieci always from Statyczne_op_aty — rendered before hasAny check
             const smieci = getSmieci();
             addBreakdown('bc-Smieci', '🗑️', 'var(--muted)', 'Śmieci', smieci, [
                 row('Typ', 'Opłata stała'),

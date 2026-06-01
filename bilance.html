@@ -545,7 +545,7 @@
 
         function getStatValue(typ) {
             if (!statOpData || !statOpData.id || !statOpData.Nazwa) return null;
-            const idx = statOpData.Nazwa.findIndex(n => typeof n === 'string' && n.toLowerCase() === typ.toLowerCase());
+            const idx = statOpData.Nazwa.findIndex(n => mediaTyp(n) === typ);
             return idx >= 0 ? (statOpData.Wartosc[idx] ?? null) : null;
         }
 
@@ -588,7 +588,7 @@
 
         function getSmieci() {
             if (!statOpData || !statOpData.id || !statOpData.Nazwa) return null;
-            const idx = statOpData.Nazwa.findIndex(n => typeof n === 'string' && n.toLowerCase() === 'śmieci');
+            const idx = statOpData.Nazwa.findIndex(n => mediaTyp(n).toLowerCase() === 'śmieci');
             return idx >= 0 ? (statOpData.Wartosc[idx] ?? null) : null;
         }
 
